@@ -1,0 +1,734 @@
+<script setup>
+import { ref } from "vue";
+const showResults = ref(false)
+
+const onOptionSelected = (isCorrect) => {
+  if (isCorrect) {
+    const ps = showResults.value = !showResults.value
+    return ps
+  }
+}
+</script>
+
+<template>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aladin">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">
+  <div v-if="showDepartmentModal" id="overlay" class="overlay" @click="showDepartmentModal = false">
+    <div class="modals" @click.stop>
+      <div class="userdetailsheader">
+        <p class="userdetailstext">Department</p>
+        <p @click="showDepartmentModal = false" :style="{ cursor: 'pointer' }">X</p>
+      </div>
+      <form @submit.prevent="onSubmit">
+        <div class="Line">
+          <div class="formDetails">
+            <label>Department Short Code</label>
+            <input placeholder="Department ShortCode" type="text" v-model="departmentShortCode" />
+          </div>
+        </div>
+
+        <div class="Line">
+          <div class="address">
+            <label>Department Description</label>
+            <input placeholder="Department" type="text" v-model="department" />
+          </div>
+        </div>
+        <b style="margin-left: 15px;">{{ errorMessage }}</b>
+
+        <button v-if='onEdits' v-on:click.prevent="onSubmitEdit" class="newUser">
+          Submit
+        </button>
+        <button v-else v-on:click.prevent="onSubmit" class="newUser">
+          Submit
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div v-if="showResults" class="overlay1" @click="showResults = false">
+    <div class="modal2 animated fadeInRight" @click.stop>
+      <div class="sidebar-header">
+        <h3>Notifications</h3>
+        <span class="close" @click="showResults = false"> ✕ </span>
+      </div>
+      <div class="notibox" v-for="i in notifications" :key="i.id">
+        <div class="iconsize"> <v-icon size="large">mdi-bell-outline</v-icon></div>
+        <div class="notetext">
+          <h2>{{ i.notificationType }}</h2>
+          <p :style="{ color: 'black' }">{{ i.description }}</p>
+        </div>
+        <div class="options" :style="{ cursor: 'pointer' }">
+          <h3 @click="navigatetoNotification(i.recordId, i.notificationType)">See details</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <PageHeader @selectOption="onOptionSelected"></PageHeader>
+
+  <body>
+
+    <WelcomeHead></WelcomeHead>
+    <div class="settingheader">
+      <SettingsHeader></SettingsHeader>
+      <button @click="onNew" class="rfqbtn2" v-if="$route.path == '/settings/department'">
+        +
+      </button>
+    </div>
+    <div class="purchdetails">
+      <div class="Rfq">
+        <div class="table-responsive-sm">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th scope="col"><b>Department Short Code </b>
+                  <img src="../../assets/images/sorticon.svg" class="sorticon" v-on:click="ascending = !ascending" />
+                </th>
+                <th scope="col"><b>Department </b>
+                  <img src="../../assets/images/sorticon.svg" class="sorticon" v-on:click="ascending = !ascending" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="department in filteredUsers" :key="department.id"
+                :style="{ cursor: 'pointer'}"
+                @click="editDepartment(department.shortCode, department.departmentDescription)" :onClick="onEdit">
+                <th scope="row">{{ department.shortCode }}</th>
+                <td>{{ department.departmentDescription }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="paginationButtons">
+          <button @click="prevPage" :disabled="pageNumber == 1" class="paginationButton">
+            &lt
+          </button>
+          <button  class="paginationButtonNumber" :disabled="pageNumber >= pageCount">
+            {{ pageNumber }}
+          </button>
+          <button @click="nextPage()" class="paginationButton" :disabled="pageNumber >= pageCount">
+            >
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</template>
+  
+  
+<script>
+import { ref } from "vue";
+import WelcomeHead from '../../components/PageMenuHeader.vue';
+import PageHeader from '../../components/TopHeader.vue'
+import SettingsHeader from "../../components/SettingsHeader.vue";
+import settingsService from "../../services/settingsService";
+import notificationServices from "../../services/notificationServices";
+import { useCounterStore } from "../../store/piniaStore"
+import pinia from "../../store/store";
+const stores = useCounterStore(pinia);
+
+export default {
+  props: {
+    size: {
+      type: Number,
+      required: false,
+      default: 10
+    }
+  },
+  components: {
+    WelcomeHead, PageHeader, SettingsHeader
+  },
+  data() {
+    return {
+      ascending: true,
+      completeValue: false,
+      sortBy: 'alphabetically',
+      pageNumber: 1,  // default to page 0
+      departmentList: [],
+      disabled: false,
+      errorMessage: '',
+      department: "",
+      departmentShortCode: "",
+      showResults: false,
+      onEdits: false,
+      showDepartmentModal: false,
+      notifications: []
+
+    };
+  },
+  async created() {
+    this.departmentList = await settingsService.getDepartments()
+    this.notifications = await notificationServices.getNotifications(stores.signedInUserEmail)
+    let notifs = await notificationServices.getNotifications(stores.signedInUserEmail)
+    this.notifications = notifs.reverse()
+  },
+
+  computed: {
+    pageCount() {
+      let l = this.departmentList.length,
+        s = this.size;
+      return Math.ceil(l / s);
+    },
+
+    indexStart() {
+      return (this.pageNumber - 1) * this.size;
+    },
+    indexEnd() {
+      return this.indexStart + this.size;
+    },
+    filteredUsers() {
+      const start = this.pageNumber * this.size,
+        end = start + this.size;
+      let users = this.departmentList
+
+      // Sort by alphabetical order
+      users = users.sort((a, b) => {
+        if (this.sortBy == 'alphabetically') {
+          let fa = a.departmentDescription.toLowerCase(), fb = b.departmentDescription.toLowerCase()
+
+          if (fa < fb) {
+            return -1
+          }
+          if (fa > fb) {
+            return 1
+          }
+          return 0
+
+        }
+      })
+      // Show sorted array in descending or ascending order
+      if (!this.ascending) {
+        users.reverse().slice(this.indexStart, this.indexEnd)
+      }
+
+      return users.slice(this.indexStart, this.indexEnd)
+    },
+  },
+
+  methods: {
+    nextPage() {
+      this.pageNumber++;
+    },
+    prevPage() {
+      this.pageNumber--;
+    },
+
+    editDepartment(department, departmentShortCode,) {
+      this.department = department; this.departmentShortCode = departmentShortCode
+      this.showDepartmentModal = true
+    },
+
+    onEdit() {
+      this.onEdits = true;
+      this.disabled = true;
+    },
+
+    onNew() {
+      this.showDepartmentModal = true;
+      this.disabled = false;
+      this.departmentShortCode = "",
+        this.department = "",
+        this.onEdits = false;
+
+    },
+
+    async onSubmit() {
+      if (this.departmentShortCode == '', this.department == '') {
+        return this.errorMessage = "Please fill in all fields appropraitely"
+      }
+      await settingsService.createDepartments(this.departmentShortCode, this.department)
+      this.showDepartmentModal = false;
+      setTimeout(async () => {
+        this.departmentList = await settingsService.getDepartments()
+      }, 2000);
+    },
+
+    async onSubmitEdit() {
+      if (this.departmentShortCode == '', this.department == '') {
+        return this.errorMessage = "Please fill in all fields appropraitely"
+      }
+      await settingsService.createDepartments(this.departmentShortCode, this.department)
+      this.showDepartmentModal = false;
+      setTimeout(async () => {
+        this.departmentList = await settingsService.getDepartments()
+      }, 2000);
+    }
+  },
+  navigatetoNotification(id, type) {
+    if (type == 'Bid Submission') {
+      this.$router.push(`/rfqedit/${id}`)
+    }
+
+    else if (type == 'Signed Contract Upload') {
+      this.$router.push(`/purchcontractdetails/${id}`)
+    }
+  }
+
+};
+</script>
+  
+  
+<style scoped>
+.paginationButtons {
+  justify-content: flex-end;
+  align-self: flex-end;
+  display: flex;
+  margin-top: -20px;
+}
+.paginationButton {
+  background-color: rgb(255, 255, 255);
+  padding: 5px 10px 5px 10px;
+  border: 1px solid #b3b3b3;
+  color: black
+}
+
+.paginationButtonNumber {
+  background-color: #227CBF;
+  padding: 5px 10px 5px 10px;
+  color: white;
+}
+
+.notetext h2{
+  font-size: 18px;
+  font-family: 'Roboto';
+  margin-bottom: 0px;
+}
+
+body {
+  font-family: Roboto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 30px 50px;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 1;
+  background: #FAFAFB;
+}
+
+.purchdetails {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 20px 0px 0px 30px;
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 10px;
+}
+
+.sorticon:hover {
+  cursor: pointer;
+}
+
+
+
+.activityStatusPurch {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px 20px;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+}
+
+.settingheader {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.rfqbtn,
+.newUser {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  margin-top: 27px;
+  line-height: 19px;
+  color: #FFFFFF;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  gap: 10px;
+  border: none;
+  cursor: pointer;
+  width: 200px;
+  height: 40px;
+  background: linear-gradient(90deg, #227CBF 0%, #47B65C 100%);
+  border-radius: 50px;
+}
+
+.rfqbtn:hover {
+  background: linear-gradient(90deg, #47B65C 0%, #227CBF 100%);
+  transition: 0.7s;
+}
+
+.Rfq {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0px 0px 0px;
+  gap: 30px;
+  width: 100%;
+
+}
+
+.rfqtableHeader {
+  width: 100%;
+  background: #FFFFFF;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-gap: 20px;
+  margin-bottom: -10px;
+}
+
+.tableHeader {
+  display: flex;
+  flex-direction: row;
+}
+
+.tableHeadertext {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: bold;
+  margin-right: 5px;
+  font-size: 16px;
+  line-height: 19px;
+  color: #000000;
+  text-align: left;
+}
+
+.tablerowtext {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 300;
+  width: 100%;
+  font-size: 16px;
+  line-height: 19px;
+  color: #000000;
+  text-align: left;
+}
+
+.overlay {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.493);
+  z-index: 10;
+  display: flex;
+  overflow: auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay1 {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.493);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.notetext {
+  margin-left: 10px;
+  font-family: 'Roboto';
+  display: flex;
+  flex-direction: column;
+  font-weight: 300;
+  font-size: 12px;
+  width: 18vw;
+  padding-right: 10px;
+  line-height: 14px;
+  border-right: 1px solid #E4E4E7;
+  color: black;
+}
+
+.sidebar-header {
+  margin-left: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 10px;
+  align-items: baseline;
+  color: rgb(0, 0, 0);
+  cursor: context-menu;
+}
+
+.sidebar-header .close {
+  cursor: pointer;
+  border-radius: 20px 0px 0px 20px;
+  padding: 3px 0px 10px 120px;
+}
+
+.notibox {
+  color: black;
+  font-family: 'Roboto';
+  background-color: white;
+  padding: 15px;
+  width: 23.5vw;
+  margin: 5px 0px 5px 10px;
+  border-radius: 6px;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  vertical-align: middle;
+  box-shadow: 0px 0px 2px 0.3px rgb(146, 146, 146);
+}
+
+.iconsize {
+  margin-top: 3px
+}
+
+.modals {
+  vertical-align: middle;
+  position: relative;
+  background-color: white;
+  z-index: 10;
+  display: flex;
+  flex-direction: row;
+  top: -40px;
+  right: -35vw;
+  border: 10px;
+  margin-top: -50px;
+  width: 24vw;
+  height: 80px;
+  border-radius: 10px;
+  padding: 20px 0px 10px 25px;
+}
+
+.userdetailsheader {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  gap: 10px;
+  width: 900px;
+  height: 44px;
+  margin-top: -30px;
+  background: #F7F7F7;
+  border-width: 0px 1px 1px 1px;
+  border-style: solid;
+  border-color: #E8E8E8;
+  border-radius: 5px 5px 0px 0px;
+  font-size: 20px;
+}
+
+.userdetailstext {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 600;
+  color: #000000;
+}
+
+.Line {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0px 20px;
+  width: 900px;
+  height: 60px;
+  margin-top: 25px;
+}
+
+input[type="email"]:disabled {
+  background: #dddddd;
+}
+
+.newUser {
+  margin: 20px 0px 0px 20px;
+}
+
+.formDetails,
+.address {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 5px;
+  width: 270px;
+  height: 60px;
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 14px;
+  color: #000000;
+}
+
+.formDetails input {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 20px 10px 10px;
+  gap: 71px;
+  width: 270px;
+  height: 40px;
+  background: #FFFFFF;
+  border: 1px solid #E4E4E7;
+  border-radius: 5px;
+}
+
+.address input {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 20px 10px 10px;
+  gap: 71px;
+  width: 860px;
+  height: 40px;
+  background: #FFFFFF;
+  border: 1px solid #E4E4E7;
+  border-radius: 5px;
+}
+
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: transparent;
+  background-image: url('../../assets/images/arrow_right.svg');
+  background-repeat: no-repeat;
+  background-position-x: 98%;
+  background-position-y: 13px;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  padding-left: 10px;
+  width: 270px;
+  height: 40px;
+  border-radius: 5px;
+  font-family: Roboto;
+  font-size: 12px;
+}
+
+.modal2 {
+  position: fixed;
+  width: 350px;
+  right: -5px;
+  overflow: auto;
+  box-shadow: 0px 0px 5px 0.5px rgb(101, 101, 101);
+  background-color: #e6e6e6;
+  border-left: 1px solid rgb(113, 113, 113);
+  height: 100%;
+  top: 0px;
+  display: flex;
+  flex-direction: column;
+}
+
+.options h3 {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 14px;
+  margin: 5px;
+  border-bottom: 1px solid #E4E4E7;
+  text-align: center;
+  color: black;
+  border-bottom: #808080;
+  text-decoration: underline;
+}
+
+.options {
+  padding: 5px;
+}
+
+.modals img {
+  margin-top: 5px;
+}
+
+.rfqbtn2:hover {
+  background: linear-gradient(90deg, #47B65C 0%, #227CBF 100%);
+  transition: 0.7s;
+}
+
+.rfqbtn2 {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 19px;
+  color: #FFFFFF;
+  justify-content: center;
+  margin-top: 17px;
+  padding: 10px;
+  gap: 10px;
+  border: none;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(90deg, #227CBF 0%, #47B65C 100%);
+  border-radius: 30px;
+}
+
+.options p {
+  font-family: Roboto;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 14px;
+  text-align: center;
+  color: #808080;
+}
+
+.animated {
+  background-repeat: no-repeat;
+  background-position: left top;
+  margin-bottom: 60px;
+  -webkit-animation-duration: 0.9s;
+  animation-duration: 0.9s;
+  -webkit-animation-fill-mode: both;
+  animation-fill-mode: both;
+}
+
+@-webkit-keyframes fadeInRight {
+  0% {
+    opacity: 0;
+    -webkit-transform: translateX(20px);
+  }
+
+  100% {
+    opacity: 1;
+    -webkit-transform: translateX(0);
+  }
+}
+
+@keyframes fadeInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fadeInRight {
+  -webkit-animation-name: fadeInRight;
+  animation-name: fadeInRight;
+}
+
+
+@media (min-width: 1024px) {
+  .Home {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+
+  }
+}</style>
