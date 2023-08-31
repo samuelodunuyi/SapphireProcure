@@ -254,7 +254,7 @@ export default {
 
   async getRequisitionsbyId(id) {
     try {
-      let response = await fetch(`${config.apiurl}/Requisitionsbyid/${id}`);
+      let response = await fetch(`${config.apiurl}/getRequisitionsbyid/${id}`);
       this.posts = await response.json();
       return this.posts
     } catch (error) {
